@@ -3,6 +3,8 @@ from telebot import types
 import sqlite3
 import time
 import os
+from flask import Flask
+import threading
 
 # ===== ENV =====
 TOKEN = os.getenv("8793822580:AAF40RYW-gBZJp25IE4FTMIBEVLbouk7RJU")
@@ -140,12 +142,24 @@ def admin(c):
     else:
         bot.send_message(user_id, "❌ Rad etildi")
 
-# ===== RUN =====
-print("Bot ishlayapti...")
+# ===== FLASK =====
+app = Flask(__name__)
 
-while True:
-    try:
-        bot.infinity_polling()
-    except Exception as e:
-        print("Xato:", e)
-        time.sleep(5)
+@app.route('/')
+def home():
+    return "Bot ishlayapti"
+
+# ===== RUN BOT THREAD =====
+def run_bot():
+    while True:
+        try:
+            bot.infinity_polling()
+        except Exception as e:
+            print("Xato:", e)
+            time.sleep(5)
+
+threading.Thread(target=run_bot).start()
+
+# ===== RUN SERVER =====
+port = int(os.environ.get("PORT", 10000))
+app.run(host="0.0.0.0", port=port)
