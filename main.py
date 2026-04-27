@@ -7,7 +7,9 @@ from flask import Flask
 import threading
 
 # ===== ENV =====
-TOKEN = os.getenv("8793822580:AAF40RYW-gBZJp25IE4FTMIBEVLbouk7RJU")
+import os
+
+TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
 CARD = os.getenv("CARD", "9860196600376491")
 
