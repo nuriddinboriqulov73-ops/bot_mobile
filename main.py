@@ -7,10 +7,8 @@ from flask import Flask
 import threading
 
 # ===== ENV =====
-import os
-
 TOKEN = os.getenv("8793822580:AAF40RYW-gBZJp25IE4FTMIBEVLbouk7RJU")
-ADMIN_ID = int(os.getenv("ADMIN_ID"))
+ADMIN_ID = int(os.getenv("6911800755"))
 CARD = os.getenv("CARD", "9860196600376491")
 
 bot = telebot.TeleBot(TOKEN)
@@ -24,15 +22,6 @@ CREATE TABLE IF NOT EXISTS numbers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     operator TEXT,
     number TEXT
-)
-""")
-
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS orders (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id TEXT,
-    number TEXT,
-    status TEXT
 )
 """)
 
@@ -51,29 +40,50 @@ def start(m):
 
     bot.send_message(m.chat.id, "📱 Operator tanlang:", reply_markup=markup)
 
+# ===== ADD =====
+@bot.message_handler(commands=['add'])
+def add_number(m):
+    if m.chat.id != ADMIN_ID:
+        return bot.send_message(m.chat.id, "❌ Siz admin emassiz")
+
+    bot.send_message(m.chat.id, "Format:\noperator raqam\n\nMisol:\nbeeline 901234567")
+    bot.register_next_step_handler(m, save_number)
+
+def save_number(m):
+    try:
+        op, num = m.text.split()
+
+        cursor.execute(
+            "INSERT INTO numbers (operator, number) VALUES (?, ?)",
+            (op.lower(), num)
+        )
+        conn.commit()
+
+        bot.send_message(m.chat.id, "✅ Raqam qo‘shildi")
+    except:
+        bot.send_message(m.chat.id, "❌ Xato format")
+
+# ===== DELETE =====
+@bot.message_handler(commands=['del'])
+def delete_number(m):
+    if m.chat.id != ADMIN_ID:
+        return bot.send_message(m.chat.id, "❌ Siz admin emassiz")
+
+    bot.send_message(m.chat.id, "O‘chiriladigan raqamni kiriting:")
+    bot.register_next_step_handler(m, remove_number)
+
+def remove_number(m):
+    cursor.execute("DELETE FROM numbers WHERE number=?", (m.text,))
+    conn.commit()
+    bot.send_message(m.chat.id, "🗑 O‘chirildi")
+
 # ===== OPERATOR =====
 @bot.message_handler(func=lambda m: m.text in ["🟡 Beeline","🔴 Ucell","🔵 Uzmobile","🟣 Mobiuz"])
 def operator(m):
-    op = m.text.split()[1]
+    op = m.text.split()[1].lower()
     user_data[m.chat.id] = {"operator": op}
 
     bot.send_message(m.chat.id, "🔢 Oxirgi 4 raqam kiriting:")
-
-# ===== VIP =====
-@bot.message_handler(func=lambda m: m.text == "💎 VIP")
-def vip(m):
-    cursor.execute("SELECT number FROM numbers")
-    res = cursor.fetchall()
-
-    if not res:
-        bot.send_message(m.chat.id, "❌ Raqam yo‘q")
-        return
-
-    markup = types.InlineKeyboardMarkup()
-    for r in res:
-        markup.add(types.InlineKeyboardButton(r[0], callback_data=f"num_{r[0]}"))
-
-    bot.send_message(m.chat.id, "💎 VIP raqamlar:", reply_markup=markup)
 
 # ===== SEARCH =====
 @bot.message_handler(func=lambda m: m.text.isdigit() and len(m.text)==4)
@@ -97,52 +107,15 @@ def search(m):
 
     bot.send_message(m.chat.id, "📞 Tanlang:", reply_markup=markup)
 
-# ===== TANLASH =====
+# ===== SELECT =====
 @bot.callback_query_handler(func=lambda c: c.data.startswith("num_"))
 def select_number(c):
     number = c.data.split("_")[1]
-    user_data[c.from_user.id]["number"] = number
 
     bot.send_message(
         c.message.chat.id,
         f"📞 {number}\n💳 Karta: {CARD}\n📸 Screenshot yuboring"
     )
-
-# ===== SCREENSHOT =====
-@bot.message_handler(content_types=['photo'])
-def photo(m):
-    data = user_data.get(m.chat.id, {})
-
-    cursor.execute(
-        "INSERT INTO orders (user_id, number, status) VALUES (?, ?, ?)",
-        (m.chat.id, data.get("number"), "kutilyapti")
-    )
-    conn.commit()
-
-    markup = types.InlineKeyboardMarkup()
-    markup.add(
-        types.InlineKeyboardButton("✅", callback_data=f"ok_{m.chat.id}"),
-        types.InlineKeyboardButton("❌", callback_data=f"no_{m.chat.id}")
-    )
-
-    bot.send_photo(
-        ADMIN_ID,
-        m.photo[-1].file_id,
-        caption=f"User: {m.chat.id}\nNumber: {data.get('number')}",
-        reply_markup=markup
-    )
-
-    bot.send_message(m.chat.id, "⏳ Tekshirilmoqda...")
-
-# ===== ADMIN =====
-@bot.callback_query_handler(func=lambda c: c.data.startswith("ok_") or c.data.startswith("no_"))
-def admin(c):
-    user_id = c.data.split("_")[1]
-
-    if c.data.startswith("ok_"):
-        bot.send_message(user_id, "✅ Tasdiqlandi")
-    else:
-        bot.send_message(user_id, "❌ Rad etildi")
 
 # ===== FLASK =====
 app = Flask(__name__)
@@ -151,7 +124,7 @@ app = Flask(__name__)
 def home():
     return "Bot ishlayapti"
 
-# ===== RUN BOT THREAD =====
+# ===== RUN BOT =====
 def run_bot():
     while True:
         try:
