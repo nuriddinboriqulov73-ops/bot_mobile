@@ -117,12 +117,12 @@ def tarif(c):
 def photo(m):
     data = user_data.get(m.chat.id, {})
 
-    username = m.from_user.username
-    if username:
-        username = "@" + username
-    else:
-        username = "username yo‘q"
+username = m.from_user.username
 
+if username:
+    username = f"https://t.me/{Bek_0166}"
+else:
+    username = "username yo‘q"
     cursor.execute(
         "INSERT INTO orders (user_id,username,number,tarif,price,status) VALUES (?,?,?,?,?,?)",
         (m.chat.id, username, data.get("number"), "tanlangan", data.get("price"), "kutilyapti")
