@@ -66,60 +66,50 @@ conn.commit()
 user_data = {}
 admin_state = {}
 
-# ===== START =====
-@bot.message_handler(commands=['start'])
-def start(m):
+# ===== MENUS =====
+def start_menu():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add("🟡 Beeline","🔴 Ucell")
     markup.add("🔵 Uzmobile","🟣 Mobiuz")
+    return markup
 
-    bot.send_message(m.chat.id, "📱 Operator tanlang:", reply_markup=markup)
+# ===== START =====
+@bot.message_handler(commands=['start'])
+def start(m):
+    user_data[m.chat.id] = {}
+    bot.send_message(m.chat.id, "📱 Operator tanlang:", reply_markup=start_menu())
 
-# ===== BEELINE MENU =====
+# ===== ORQAGA =====
+@bot.message_handler(func=lambda m: m.text == "⬅️ Orqaga")
+def back(m):
+    bot.send_message(m.chat.id, "📱 Operator tanlang:", reply_markup=start_menu())
+
+# ===== BEELINE MENU (COUNT) =====
 @bot.message_handler(func=lambda m: m.text == "🟡 Beeline")
 def beeline(m):
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("✨ GOLD","🥈 SILVER","📱 SIMPLE")
-
     user_data[m.chat.id] = {"operator": "Beeline"}
+
+    cursor.execute("SELECT COUNT(*) FROM numbers WHERE operator='Beeline' AND category='GOLD'")
+    gold = cursor.fetchone()[0]
+
+    cursor.execute("SELECT COUNT(*) FROM numbers WHERE operator='Beeline' AND category='SILVER'")
+    silver = cursor.fetchone()[0]
+
+    cursor.execute("SELECT COUNT(*) FROM numbers WHERE operator='Beeline' AND category='SIMPLE'")
+    simple = cursor.fetchone()[0]
+
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add(f"✨ GOLD ({gold})", f"🥈 SILVER ({silver})", f"📱 SIMPLE ({simple})")
+    markup.add("⬅️ Orqaga")
+
     bot.send_message(m.chat.id, "Kategoriya tanlang:", reply_markup=markup)
 
-# ===== UCELL =====
-@bot.message_handler(func=lambda m: m.text == "🔴 Ucell")
-def ucell(m):
-    user_data[m.chat.id] = {"operator": "Ucell"}
-    show_all(m, "Ucell")
-
-# ===== UZMOBILE =====
-@bot.message_handler(func=lambda m: m.text == "🔵 Uzmobile")
-def uz(m):
-    user_data[m.chat.id] = {"operator": "Uzmobile"}
-    show_all(m, "Uzmobile")
-
-# ===== MOBIUZ =====
-@bot.message_handler(func=lambda m: m.text == "🟣 Mobiuz")
-def mobi(m):
-    user_data[m.chat.id] = {"operator": "Mobiuz"}
-    show_all(m, "Mobiuz")
-
-# ===== SHOW ALL =====
-def show_all(m, operator):
-    cursor.execute("SELECT number FROM numbers WHERE operator=?", (operator,))
-    res = cursor.fetchall()
-
-    markup = types.InlineKeyboardMarkup()
-    for r in res:
-        markup.add(types.InlineKeyboardButton(r[0], callback_data=f"num_{r[0]}"))
-
-    bot.send_message(m.chat.id, f"{operator} raqamlar:", reply_markup=markup)
-
 # ===== CATEGORY =====
-@bot.message_handler(func=lambda m: m.text in ["✨ GOLD","🥈 SILVER","📱 SIMPLE"])
+@bot.message_handler(func=lambda m: "GOLD" in m.text or "SILVER" in m.text or "SIMPLE" in m.text)
 def category(m):
     cat = m.text.split(" ")[1]
 
-    data = user_data.get(m.chat.id)
-    op = data.get("operator")
+    op = user_data[m.chat.id]["operator"]
 
     cursor.execute("SELECT number FROM numbers WHERE operator=? AND category=?", (op, cat))
     res = cursor.fetchall()
@@ -129,6 +119,21 @@ def category(m):
         markup.add(types.InlineKeyboardButton(r[0], callback_data=f"num_{r[0]}"))
 
     bot.send_message(m.chat.id, f"{cat} raqamlar:", reply_markup=markup)
+
+# ===== OTHER OPERATORS =====
+@bot.message_handler(func=lambda m: m.text in ["🔴 Ucell","🔵 Uzmobile","🟣 Mobiuz"])
+def others(m):
+    op = m.text.replace("🔴 ","").replace("🔵 ","").replace("🟣 ","")
+    user_data[m.chat.id] = {"operator": op}
+
+    cursor.execute("SELECT number FROM numbers WHERE operator=?", (op,))
+    res = cursor.fetchall()
+
+    markup = types.InlineKeyboardMarkup()
+    for r in res:
+        markup.add(types.InlineKeyboardButton(r[0], callback_data=f"num_{r[0]}"))
+
+    bot.send_message(m.chat.id, f"{op} raqamlar:", reply_markup=markup)
 
 # ===== NUMBER =====
 @bot.callback_query_handler(func=lambda c: c.data.startswith("num_"))
