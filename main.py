@@ -2,13 +2,9 @@ import telebot
 from telebot import types
 import sqlite3
 import time
-import os
-from flask import Flask
-import threading
+
 TOKEN = "8793822580:AAF40RYW-gBZJp25IE4FTMIBEVLbouk7RJU"
 ADMIN_ID = 6911800755
-# ===== ENV =====
-
 
 bot = telebot.TeleBot(TOKEN)
 
@@ -20,126 +16,256 @@ cursor.execute("""
 CREATE TABLE IF NOT EXISTS numbers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     operator TEXT,
-    number TEXT
+    number TEXT,
+    category TEXT
+)
+""")
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS tariffs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    operator TEXT,
+    name TEXT,
+    price TEXT
+)
+""")
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT,
+    number TEXT,
+    tarif TEXT,
+    price TEXT,
+    status TEXT
 )
 """)
 
 conn.commit()
 
+# ===== TARIFLAR =====
+tariffs = [
+    ("Beeline","Status 20","30000"),
+    ("Beeline","Status 40","40000"),
+    ("Ucell","Ucell 25","25000"),
+    ("Ucell","Ucell 40","40000"),
+    ("Uzmobile","Uz 20","20000"),
+    ("Uzmobile","Uz 50","50000"),
+    ("Mobiuz","Mobi 20","20000"),
+    ("Mobiuz","Mobi 50","50000"),
+]
+
+for op, name, price in tariffs:
+    cursor.execute("SELECT * FROM tariffs WHERE name=?", (name,))
+    if not cursor.fetchone():
+        cursor.execute("INSERT INTO tariffs (operator,name,price) VALUES (?,?,?)",(op,name,price))
+
+conn.commit()
+
 # ===== STATE =====
 user_data = {}
+admin_state = {}
 
 # ===== START =====
 @bot.message_handler(commands=['start'])
 def start(m):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("🟡 Beeline", "🔴 Ucell")
-    markup.add("🔵 Uzmobile", "🟣 Mobiuz")
-    markup.add("💎 VIP")
+    markup.add("🟡 Beeline","🔴 Ucell")
+    markup.add("🔵 Uzmobile","🟣 Mobiuz")
 
     bot.send_message(m.chat.id, "📱 Operator tanlang:", reply_markup=markup)
 
-# ===== ADD =====
-@bot.message_handler(commands=['add'])
-def add_number(m):
-    if m.chat.id != ADMIN_ID:
-        return bot.send_message(m.chat.id, "❌ Siz admin emassiz")
+# ===== BEELINE MENU =====
+@bot.message_handler(func=lambda m: m.text == "🟡 Beeline")
+def beeline(m):
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add("✨ GOLD","🥈 SILVER","📱 SIMPLE")
 
-    bot.send_message(m.chat.id, "Format:\noperator raqam\n\nMisol:\nbeeline 901234567")
-    bot.register_next_step_handler(m, save_number)
+    user_data[m.chat.id] = {"operator": "Beeline"}
+    bot.send_message(m.chat.id, "Kategoriya tanlang:", reply_markup=markup)
 
-def save_number(m):
-    try:
-        op, num = m.text.split()
+# ===== UCELL =====
+@bot.message_handler(func=lambda m: m.text == "🔴 Ucell")
+def ucell(m):
+    user_data[m.chat.id] = {"operator": "Ucell"}
+    show_all(m, "Ucell")
 
-        cursor.execute(
-            "INSERT INTO numbers (operator, number) VALUES (?, ?)",
-            (op.lower(), num)
-        )
-        conn.commit()
+# ===== UZMOBILE =====
+@bot.message_handler(func=lambda m: m.text == "🔵 Uzmobile")
+def uz(m):
+    user_data[m.chat.id] = {"operator": "Uzmobile"}
+    show_all(m, "Uzmobile")
 
-        bot.send_message(m.chat.id, "✅ Raqam qo‘shildi")
-    except:
-        bot.send_message(m.chat.id, "❌ Xato format")
+# ===== MOBIUZ =====
+@bot.message_handler(func=lambda m: m.text == "🟣 Mobiuz")
+def mobi(m):
+    user_data[m.chat.id] = {"operator": "Mobiuz"}
+    show_all(m, "Mobiuz")
 
-# ===== DELETE =====
-@bot.message_handler(commands=['del'])
-def delete_number(m):
-    if m.chat.id != ADMIN_ID:
-        return bot.send_message(m.chat.id, "❌ Siz admin emassiz")
-
-    bot.send_message(m.chat.id, "O‘chiriladigan raqamni kiriting:")
-    bot.register_next_step_handler(m, remove_number)
-
-def remove_number(m):
-    cursor.execute("DELETE FROM numbers WHERE number=?", (m.text,))
-    conn.commit()
-    bot.send_message(m.chat.id, "🗑 O‘chirildi")
-
-# ===== OPERATOR =====
-@bot.message_handler(func=lambda m: m.text in ["🟡 Beeline","🔴 Ucell","🔵 Uzmobile","🟣 Mobiuz"])
-def operator(m):
-    op = m.text.split()[1].lower()
-    user_data[m.chat.id] = {"operator": op}
-
-    bot.send_message(m.chat.id, "🔢 Oxirgi 4 raqam kiriting:")
-
-# ===== SEARCH =====
-@bot.message_handler(func=lambda m: m.text.isdigit() and len(m.text)==4)
-def search(m):
-    data = user_data.get(m.chat.id)
-    if not data:
-        return
-
-    op = data["operator"]
-
-    cursor.execute("SELECT number FROM numbers WHERE operator=? AND number LIKE ?", (op, f"%{m.text}"))
+# ===== SHOW ALL =====
+def show_all(m, operator):
+    cursor.execute("SELECT number FROM numbers WHERE operator=?", (operator,))
     res = cursor.fetchall()
-
-    if not res:
-        bot.send_message(m.chat.id, "❌ Topilmadi")
-        return
 
     markup = types.InlineKeyboardMarkup()
     for r in res:
         markup.add(types.InlineKeyboardButton(r[0], callback_data=f"num_{r[0]}"))
 
-    bot.send_message(m.chat.id, "📞 Tanlang:", reply_markup=markup)
+    bot.send_message(m.chat.id, f"{operator} raqamlar:", reply_markup=markup)
 
-# ===== TANLASH (TO‘LOVSIZ) =====
-@bot.callback_query_handler(func=lambda c: c.data.startswith("num_"))
-def select_number(c):
-    number = c.data.split("_")[1]
+# ===== CATEGORY =====
+@bot.message_handler(func=lambda m: m.text in ["✨ GOLD","🥈 SILVER","📱 SIMPLE"])
+def category(m):
+    cat = m.text.split(" ")[1]
+
+    data = user_data.get(m.chat.id)
+    op = data.get("operator")
+
+    cursor.execute("SELECT number FROM numbers WHERE operator=? AND category=?", (op, cat))
+    res = cursor.fetchall()
 
     markup = types.InlineKeyboardMarkup()
-    markup.add(
-        types.InlineKeyboardButton("📩 Admin bilan bog‘lanish", url="https://t.me/beeline_Offise_Admin")
-    )
+    for r in res:
+        markup.add(types.InlineKeyboardButton(r[0], callback_data=f"num_{r[0]}"))
+
+    bot.send_message(m.chat.id, f"{cat} raqamlar:", reply_markup=markup)
+
+# ===== NUMBER =====
+@bot.callback_query_handler(func=lambda c: c.data.startswith("num_"))
+def number(c):
+    num = c.data.split("_")[1]
+
+    data = user_data.get(c.from_user.id,{})
+    data["number"] = num
+    user_data[c.from_user.id] = data
+
+    op = data.get("operator")
+
+    cursor.execute("SELECT name,price FROM tariffs WHERE operator=?", (op,))
+    tariffs = cursor.fetchall()
+
+    markup = types.InlineKeyboardMarkup()
+    for t in tariffs:
+        markup.add(types.InlineKeyboardButton(f"{t[0]} - {t[1]} so‘m", callback_data=f"tarif_{t[0]}_{t[1]}"))
+
+    bot.send_message(c.message.chat.id, "📶 Tarif tanlang:", reply_markup=markup)
+
+# ===== TARIF =====
+@bot.callback_query_handler(func=lambda c: c.data.startswith("tarif_"))
+def tarif(c):
+    _, name, price = c.data.split("_")
+
+    data = user_data.get(c.from_user.id,{})
+    data["tarif"] = name
+    data["price"] = price
+    user_data[c.from_user.id] = data
 
     bot.send_message(
         c.message.chat.id,
-        f"📞 {number}\n\n✅ Bu raqam bazada mavjud!\n\n📩 Admin bilan bog‘laning.",
-        reply_markup=markup
+        f"📞 {data.get('number')}\n📶 {name}\n💰 {price} so‘m\n\n💳 Karta: 9860196600376491\n📸 Screenshot yuboring"
     )
 
-# ===== FLASK =====
-app = Flask(__name__)
+# ===== SCREENSHOT =====
+@bot.message_handler(content_types=['photo'])
+def photo(m):
+    data = user_data.get(m.chat.id,{})
 
-@app.route('/')
-def home():
-    return "Bot ishlayapti"
+    cursor.execute(
+        "INSERT INTO orders (user_id,number,tarif,price,status) VALUES (?,?,?,?,?)",
+        (m.chat.id,data.get("number"),data.get("tarif"),data.get("price"),"kutilyapti")
+    )
+    conn.commit()
 
-# ===== RUN BOT =====
-def run_bot():
-    while True:
-        try:
-            bot.infinity_polling()
-        except Exception as e:
-            print("Xato:", e)
-            time.sleep(5)
+    markup = types.InlineKeyboardMarkup()
+    markup.add(
+        types.InlineKeyboardButton("✅",callback_data=f"ok_{m.chat.id}"),
+        types.InlineKeyboardButton("❌",callback_data=f"no_{m.chat.id}")
+    )
 
-threading.Thread(target=run_bot).start()
+    bot.send_photo(ADMIN_ID, m.photo[-1].file_id, caption=str(data), reply_markup=markup)
+    bot.send_message(m.chat.id,"⏳ Tekshirilmoqda...")
 
-# ===== RUN SERVER =====
-port = int(os.environ.get("PORT", 10000))
-app.run(host="0.0.0.0", port=port)
+# ===== ADMIN =====
+@bot.callback_query_handler(func=lambda c: c.data.startswith("ok_") or c.data.startswith("no_"))
+def admin(c):
+    user_id = c.data.split("_")[1]
+
+    if c.data.startswith("ok_"):
+        bot.send_message(user_id,"✅ Tasdiqlandi")
+    else:
+        bot.send_message(user_id,"❌ Rad etildi")
+
+# ===== ADD =====
+@bot.message_handler(commands=['add'])
+def add(m):
+    if m.chat.id != ADMIN_ID:
+        return
+
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add("Beeline","Ucell","Uzmobile","Mobiuz")
+
+    admin_state[m.chat.id] = {}
+    bot.send_message(m.chat.id,"Operator:",reply_markup=markup)
+
+@bot.message_handler(func=lambda m: m.chat.id in admin_state and "operator" not in admin_state[m.chat.id])
+def add_op(m):
+    admin_state[m.chat.id]["operator"] = m.text
+
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add("GOLD","SILVER","SIMPLE")
+
+    bot.send_message(m.chat.id,"Kategoriya:",reply_markup=markup)
+
+@bot.message_handler(func=lambda m: m.chat.id in admin_state and "category" not in admin_state[m.chat.id])
+def add_cat(m):
+    admin_state[m.chat.id]["category"] = m.text
+    bot.send_message(m.chat.id,"Raqam:")
+
+@bot.message_handler(func=lambda m: m.chat.id in admin_state and "number" not in admin_state[m.chat.id])
+def add_num(m):
+    data = admin_state[m.chat.id]
+
+    cursor.execute(
+        "INSERT INTO numbers (operator,number,category) VALUES (?,?,?)",
+        (data["operator"], m.text, data["category"])
+    )
+    conn.commit()
+
+    bot.send_message(m.chat.id,"✅ Qo‘shildi")
+    del admin_state[m.chat.id]
+
+# ===== DELETE =====
+@bot.message_handler(commands=['delete'])
+def delete(m):
+    if m.chat.id != ADMIN_ID:
+        return
+
+    cursor.execute("SELECT number FROM numbers")
+    res = cursor.fetchall()
+
+    markup = types.InlineKeyboardMarkup()
+    for r in res:
+        markup.add(types.InlineKeyboardButton(r[0], callback_data=f"del_{r[0]}"))
+
+    bot.send_message(m.chat.id,"O‘chirish:",reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith("del_"))
+def del_num(c):
+    if c.from_user.id != ADMIN_ID:
+        return
+
+    num = c.data.split("_")[1]
+    cursor.execute("DELETE FROM numbers WHERE number=?", (num,))
+    conn.commit()
+
+    bot.send_message(c.message.chat.id,f"❌ O‘chirildi: {num}")
+
+# ===== RUN =====
+print("Bot ishlayapti...")
+
+while True:
+    try:
+        bot.infinity_polling()
+    except Exception as e:
+        print("Xato:", e)
+        time.sleep(5)
