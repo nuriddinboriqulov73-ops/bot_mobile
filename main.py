@@ -9,7 +9,6 @@ import threading
 # ===== ENV =====
 TOKEN = os.getenv("8793822580:AAF40RYW-gBZJp25IE4FTMIBEVLbouk7RJU")
 ADMIN_ID = int(os.getenv("6911800755"))
-CARD = os.getenv("CARD", "9860196600376491")
 
 bot = telebot.TeleBot(TOKEN)
 
@@ -107,14 +106,20 @@ def search(m):
 
     bot.send_message(m.chat.id, "📞 Tanlang:", reply_markup=markup)
 
-# ===== SELECT =====
+# ===== TANLASH (TO‘LOVSIZ) =====
 @bot.callback_query_handler(func=lambda c: c.data.startswith("num_"))
 def select_number(c):
     number = c.data.split("_")[1]
 
+    markup = types.InlineKeyboardMarkup()
+    markup.add(
+        types.InlineKeyboardButton("📩 Admin bilan bog‘lanish", url="https://t.me/beeline_Offise_Admin")
+    )
+
     bot.send_message(
         c.message.chat.id,
-        f"📞 {number}\n💳 Karta: {CARD}\n📸 Screenshot yuboring"
+        f"📞 {number}\n\n✅ Bu raqam bazada mavjud!\n\n📩 Admin bilan bog‘laning.",
+        reply_markup=markup
     )
 
 # ===== FLASK =====
