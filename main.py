@@ -5,10 +5,10 @@ import time
 import os
 from flask import Flask
 import threading
-
+TOKEN = "8793822580:AAF40RYW-gBZJp25IE4FTMIBEVLbouk7RJU"
+ADMIN_ID = 6911800755
 # ===== ENV =====
-TOKEN = os.getenv("8793822580:AAF40RYW-gBZJp25IE4FTMIBEVLbouk7RJU")
-ADMIN_ID = int(os.getenv("6911800755"))
+
 
 bot = telebot.TeleBot(TOKEN)
 
