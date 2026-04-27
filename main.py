@@ -3,9 +3,8 @@ from telebot import types
 import sqlite3
 import time
 
-# ===== SETTINGS =====
 TOKEN = "8793822580:AAF40RYW-gBZJp25IE4FTMIBEVLbouk7RJU"
-ADMIN_ID = 6911800755   # o'zingizning ID
+ADMIN_ID = 6911800755
 ADMIN_USERNAME = "@bek_0166"
 
 bot = telebot.TeleBot(TOKEN)
@@ -25,26 +24,16 @@ CREATE TABLE IF NOT EXISTS numbers (
 
 conn.commit()
 
-# ===== STATE =====
 user_data = {}
 admin_state = {}
-
-# ===== START MENU =====
-def start_menu():
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("🟡 Beeline","🔴 Ucell")
-    markup.add("🔵 Uzmobile","🟣 Mobiuz")
-    return markup
 
 # ===== START =====
 @bot.message_handler(commands=['start'])
 def start(m):
-    bot.send_message(m.chat.id, "📱 Operator tanlang:", reply_markup=start_menu())
-
-# ===== ORQAGA =====
-@bot.message_handler(func=lambda m: m.text == "⬅️ Orqaga")
-def back(m):
-    bot.send_message(m.chat.id, "📱 Operator tanlang:", reply_markup=start_menu())
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add("🟡 Beeline","🔴 Ucell")
+    markup.add("🔵 Uzmobile","🟣 Mobiuz")
+    bot.send_message(m.chat.id, "📱 Operator tanlang:", reply_markup=markup)
 
 # ===== OPERATOR =====
 @bot.message_handler(func=lambda m: m.text in ["🟡 Beeline","🔴 Ucell","🔵 Uzmobile","🟣 Mobiuz"])
@@ -96,13 +85,7 @@ def pay(c):
 
     bot.send_message(
         c.message.chat.id,
-        f"""
-💳 To‘lov:
-Karta: 9860196600376491
-Summa: {price} so‘m
-
-📸 Screenshot yuboring
-"""
+        f"💳 Karta: 9860196600376491\n💰 {price} so‘m\n\n📸 Screenshot yuboring"
     )
 
 # ===== SCREENSHOT =====
@@ -111,27 +94,38 @@ def photo(m):
     data = user_data.get(m.chat.id, {})
 
     username = m.from_user.username
-    if username:
-        username = "@" + username
-    else:
-        username = "username yo‘q"
+    username = f"@{username}" if username else "username yo‘q"
+
+    markup = types.InlineKeyboardMarkup()
+    markup.add(
+        types.InlineKeyboardButton("✅ Tasdiqlash", callback_data=f"ok_{m.chat.id}"),
+        types.InlineKeyboardButton("❌ Bekor qilish", callback_data=f"no_{m.chat.id}")
+    )
 
     text = f"""
 🆕 BUYURTMA
 
-👤 User: {username}
-🆔 ID: {m.chat.id}
+👤 {username}
+🆔 {m.chat.id}
 
-📞 Raqam: {data.get("number")}
-💰 Narx: {data.get("price")} so‘m
-
-📩 Admin: {ADMIN_USERNAME}
+📞 {data.get("number")}
+💰 {data.get("price")} so‘m
 """
 
-    bot.send_photo(ADMIN_ID, m.photo[-1].file_id, caption=text)
-    bot.send_message(m.chat.id, f"⏳ Tekshirilmoqda...\n📩 Admin: {ADMIN_USERNAME}")
+    bot.send_photo(ADMIN_ID, m.photo[-1].file_id, caption=text, reply_markup=markup)
+    bot.send_message(m.chat.id, "⏳ Tekshirilmoqda...")
 
-# ===== ADD =====
+# ===== ADMIN APPROVE =====
+@bot.callback_query_handler(func=lambda c: c.data.startswith("ok_") or c.data.startswith("no_"))
+def admin(c):
+    user_id = int(c.data.split("_")[1])
+
+    if c.data.startswith("ok_"):
+        bot.send_message(user_id, "✅ To‘lov tasdiqlandi")
+    else:
+        bot.send_message(user_id, "❌ To‘lov bekor qilindi")
+
+# ===== BULK ADD =====
 @bot.message_handler(commands=['add'])
 def add(m):
     if m.chat.id != ADMIN_ID:
@@ -155,19 +149,27 @@ def add_op(m):
 @bot.message_handler(func=lambda m: m.chat.id in admin_state and "category" not in admin_state[m.chat.id])
 def add_cat(m):
     admin_state[m.chat.id]["category"] = m.text
-    bot.send_message(m.chat.id,"Raqam:")
+    bot.send_message(m.chat.id,"Raqamlarni yuboring (har biri yangi qatorda):")
 
-@bot.message_handler(func=lambda m: m.chat.id in admin_state and "number" not in admin_state[m.chat.id])
-def add_num(m):
+# 🔥 BULK INSERT
+@bot.message_handler(func=lambda m: m.chat.id in admin_state)
+def bulk_add(m):
     data = admin_state[m.chat.id]
 
-    cursor.execute(
-        "INSERT INTO numbers (operator,number,category) VALUES (?,?,?)",
-        (data["operator"], m.text, data["category"])
-    )
-    conn.commit()
+    numbers = m.text.split("\n")
+    count = 0
 
-    bot.send_message(m.chat.id,"✅ Qo‘shildi")
+    for num in numbers:
+        num = num.strip()
+        if num:
+            cursor.execute(
+                "INSERT INTO numbers (operator,number,category) VALUES (?,?,?)",
+                (data["operator"], num, data["category"])
+            )
+            count += 1
+
+    conn.commit()
+    bot.send_message(m.chat.id, f"✅ {count} ta raqam qo‘shildi")
     del admin_state[m.chat.id]
 
 # ===== RUN =====
