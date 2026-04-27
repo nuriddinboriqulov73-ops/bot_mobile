@@ -3,8 +3,10 @@ from telebot import types
 import sqlite3
 import time
 
+# ===== SETTINGS =====
 TOKEN = "8793822580:AAF40RYW-gBZJp25IE4FTMIBEVLbouk7RJU"
-ADMIN_ID = 6911800755
+ADMIN_ID = 6911800755   # o'zingizning ID
+ADMIN_USERNAME = "@bek_0166"
 
 bot = telebot.TeleBot(TOKEN)
 
@@ -18,18 +20,6 @@ CREATE TABLE IF NOT EXISTS numbers (
     operator TEXT,
     number TEXT,
     category TEXT
-)
-""")
-
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS orders (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id TEXT,
-    username TEXT,
-    number TEXT,
-    tarif TEXT,
-    price TEXT,
-    status TEXT
 )
 """)
 
@@ -49,7 +39,6 @@ def start_menu():
 # ===== START =====
 @bot.message_handler(commands=['start'])
 def start(m):
-    user_data[m.chat.id] = {}
     bot.send_message(m.chat.id, "📱 Operator tanlang:", reply_markup=start_menu())
 
 # ===== ORQAGA =====
@@ -67,7 +56,7 @@ def operator(m):
     markup.add("✨ GOLD","🥈 SILVER","📱 SIMPLE")
     markup.add("⬅️ Orqaga")
 
-    bot.send_message(m.chat.id, f"{op} kategoriya tanlang:", reply_markup=markup)
+    bot.send_message(m.chat.id, "Kategoriya tanlang:", reply_markup=markup)
 
 # ===== CATEGORY =====
 @bot.message_handler(func=lambda m: m.text in ["✨ GOLD","🥈 SILVER","📱 SIMPLE"])
@@ -86,7 +75,7 @@ def category(m):
     for r in res:
         markup.add(types.InlineKeyboardButton(r[0], callback_data=f"num_{r[0]}"))
 
-    bot.send_message(m.chat.id, f"{cat} raqamlar:", reply_markup=markup)
+    bot.send_message(m.chat.id, "Raqam tanlang:", reply_markup=markup)
 
 # ===== NUMBER =====
 @bot.callback_query_handler(func=lambda c: c.data.startswith("num_"))
@@ -95,21 +84,25 @@ def number(c):
     user_data[c.from_user.id]["number"] = num
 
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("20 ming", callback_data="tarif_20000"))
-    markup.add(types.InlineKeyboardButton("50 ming", callback_data="tarif_50000"))
+    markup.add(types.InlineKeyboardButton("50 000 so'm", callback_data="pay_50000"))
 
-    bot.send_message(c.message.chat.id, "Tarif tanlang:", reply_markup=markup)
+    bot.send_message(c.message.chat.id, f"📞 {num}\n💰 Tarif tanlang:", reply_markup=markup)
 
-# ===== TARIF =====
-@bot.callback_query_handler(func=lambda c: c.data.startswith("tarif_"))
-def tarif(c):
+# ===== PAYMENT =====
+@bot.callback_query_handler(func=lambda c: c.data.startswith("pay_"))
+def pay(c):
     price = c.data.split("_")[1]
-
     user_data[c.from_user.id]["price"] = price
 
     bot.send_message(
         c.message.chat.id,
-        f"💳 Karta: 9860196600376491\n💰 Summa: {price} so‘m\n\n📸 Screenshot yuboring"
+        f"""
+💳 To‘lov:
+Karta: 9860196600376491
+Summa: {price} so‘m
+
+📸 Screenshot yuboring
+"""
     )
 
 # ===== SCREENSHOT =====
@@ -117,31 +110,26 @@ def tarif(c):
 def photo(m):
     data = user_data.get(m.chat.id, {})
 
-username = m.from_user.username
+    username = m.from_user.username
+    if username:
+        username = "@" + username
+    else:
+        username = "username yo‘q"
 
-if username:
-    username = f"https://t.me/{Bek_0166}"
-else:
-    username = "username yo‘q"
-    cursor.execute(
-        "INSERT INTO orders (user_id,username,number,tarif,price,status) VALUES (?,?,?,?,?,?)",
-        (m.chat.id, username, data.get("number"), "tanlangan", data.get("price"), "kutilyapti")
-    )
-    conn.commit()
-
-    # ===== ADMIN MESSAGE =====
     text = f"""
-🆕 Yangi buyurtma!
+🆕 BUYURTMA
 
 👤 User: {username}
 🆔 ID: {m.chat.id}
 
 📞 Raqam: {data.get("number")}
 💰 Narx: {data.get("price")} so‘m
+
+📩 Admin: {ADMIN_USERNAME}
 """
 
     bot.send_photo(ADMIN_ID, m.photo[-1].file_id, caption=text)
-    bot.send_message(m.chat.id, "⏳ Tekshirilmoqda...")
+    bot.send_message(m.chat.id, f"⏳ Tekshirilmoqda...\n📩 Admin: {ADMIN_USERNAME}")
 
 # ===== ADD =====
 @bot.message_handler(commands=['add'])
@@ -153,7 +141,7 @@ def add(m):
     markup.add("Beeline","Ucell","Uzmobile","Mobiuz")
 
     admin_state[m.chat.id] = {}
-    bot.send_message(m.chat.id,"Operator tanlang:",reply_markup=markup)
+    bot.send_message(m.chat.id,"Operator:",reply_markup=markup)
 
 @bot.message_handler(func=lambda m: m.chat.id in admin_state and "operator" not in admin_state[m.chat.id])
 def add_op(m):
@@ -184,6 +172,7 @@ def add_num(m):
 
 # ===== RUN =====
 print("Bot ishlayapti...")
+
 while True:
     try:
         bot.infinity_polling(skip_pending=True)
