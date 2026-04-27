@@ -184,10 +184,9 @@ def add_num(m):
 
 # ===== RUN =====
 print("Bot ishlayapti...")
-
 while True:
     try:
-        bot.infinity_polling()
+        bot.infinity_polling(skip_pending=True)
     except Exception as e:
         print("Xato:", e)
         time.sleep(5)
